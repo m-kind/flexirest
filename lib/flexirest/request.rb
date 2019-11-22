@@ -357,9 +357,9 @@ module Flexirest
         @url = @forced_url
       else
         @url = @method[:url].dup
-        matches = @url.scan(/(:[a-z_-]+)/)
         @get_params ||= {}
         @post_params ||= {}
+        matches = @url.scan(/(:[a-z_-]+)/)
         matches.each do |token|
           token = token.first[1,999]
           # pull URL path variables out of @get_params/@post_params
@@ -367,6 +367,9 @@ module Flexirest
           unless object_is_class?
             # it's possible the URL path variable may not be part of the request, in that case, try to resolve it from the object attributes
             target = @object._attributes[token.to_sym] || "" if target == ""
+            # if not available as an object attribute either we might be able to get it via a method call
+            target = @object.send(token.to_sym) || "" if target == "" && @object.respond_to?(token.to_sym)
+            raise Flexirest::MissingParametersException.new("Cannot resolve path parameter: #{token}") if target == ""
           end
           @url.gsub!(":#{token}", URI.escape(target.to_s).gsub("/", "%2F").gsub("+", "%2B"))
         end

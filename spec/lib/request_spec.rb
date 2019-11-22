@@ -45,16 +45,22 @@ describe Flexirest::Request do
       put :update, "/put/:id"
       put :wrapped, "/put/:id", wrap_root: "example"
       put :conversion, "/put/:id", parse_fields: [:converted]
+      put :path_part_from_method, "/:sample_instance_method/put/:id"
+      put :missing_path_part, "/:missing_instance_method/put/:id"
       delete :remove, "/remove/:id"
       delete :remove_body, "/remove/:id", send_delete_body: true
       get :hal, "/hal", fake:"{\"_links\":{\"child\": {\"href\": \"/child/1\"}, \"other\": {\"href\": \"/other/1\"}, \"cars\":[{\"href\": \"/car/1\", \"name\":\"car1\"}, {\"href\": \"/car/2\", \"name\":\"car2\"}, {\"href\": \"/car/not-embed\", \"name\":\"car_not_embed\"} ], \"lazy\": {\"href\": \"/lazy/load\"}, \"invalid\": [{\"href\": \"/invalid/1\"}]}, \"_embedded\":{\"other\":{\"name\":\"Jane\"},\"child\":{\"name\":\"Billy\"}, \"cars\":[{\"_links\": {\"self\": {\"href\": \"/car/1\"} }, \"make\": \"Bugatti\", \"model\": \"Veyron\"}, {\"_links\": {\"self\": {\"href\": \"/car/2\"} }, \"make\": \"Ferrari\", \"model\": \"F458 Italia\"} ], \"invalid\": [{\"present\":true, \"_links\": {} } ] } }", has_many:{other:ExampleOtherClient}
-      get :fake, "/fake", fake:"{\"result\":true, \"list\":[1,2,3,{\"test\":true}], \"child\":{\"grandchild\":{\"test\":true}}}"
+      get :fake, "/fake", fake:"{\"id\":1234, \"result\":true, \"list\":[1,2,3,{\"test\":true}], \"child\":{\"grandchild\":{\"test\":true}}}"
       get :fake_proc, "/fake", fake:->(request) { "{\"result\":#{request.get_params[:id]}}" }
       get :defaults, "/defaults", defaults:{overwrite:"no", persist:"yes"}
       get :requires, "/requires", requires:[:name, :age]
       patch :only_changed_1, "/changed1", only_changed: true
       patch :only_changed_2, "/changed2", only_changed: [:debug1, :debug2]
       patch :only_changed_3, "/changed3", only_changed: { debug1: false, debug2: true }
+
+      def sample_instance_method
+        'sample_instance_method'
+      end
     end
 
     class ExampleLoadBalancedClient < Flexirest::Base
@@ -1227,5 +1233,22 @@ describe Flexirest::Request do
       expect(req.get_params.is_a?(Hash)).to be_truthy
       expect(req.get_params[:id].is_a?(Integer)).to be_truthy
     end
+  end
+
+  context "URL preparation" do
+
+    let(:object) { ExampleClient.fake }
+
+    it "should generate a path part from a method call if not available via parameter or attribute" do
+      expect_any_instance_of(Flexirest::Connection).to receive(:put).with("/sample_instance_method/put/1234", an_instance_of(String), an_instance_of(Hash)).and_return(::FaradayResponseMock.new(OpenStruct.new(body:'{"result":true}', response_headers:{})))
+      object.path_part_from_method
+    end
+
+    it "should raise an exception if path part cannot be derived from parameter, attribute or method" do
+      expect {
+        object.missing_path_part
+      }.to raise_error(Flexirest::MissingParametersException)
+    end
+
   end
 end
